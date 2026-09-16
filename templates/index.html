@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Temperature</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; max-width: 1000px; margin-inline: auto; }
+    header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+    h1 { font-size: 1.25rem; margin: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin: 1rem 0; }
+    .card { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: .5rem; padding: .75rem; }
+    .card .label { font-size: .75rem; opacity: .7; text-transform: uppercase; letter-spacing: .05em; }
+    .card .value { font-size: 1.5rem; font-weight: 600; }
+    #status { font-size: .85rem; opacity: .7; }
+    canvas { width: 100%; max-height: 420px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Raspberry Pi Temperature</h1>
+    <span id="status">connecting…</span>
+  </header>
+
+  <div class="cards">
+    <div class="card"><div class="label">Current</div><div class="value" id="current">–</div></div>
+    <div class="card"><div class="label">Min</div><div class="value" id="min">–</div></div>
+    <div class="card"><div class="label">Max</div><div class="value" id="max">–</div></div>
+    <div class="card"><div class="label">Avg</div><div class="value" id="avg">–</div></div>
+    <div class="card"><div class="label">Readings</div><div class="value" id="count">–</div></div>
+    <div class="card"><div class="label">Failed cycles</div><div class="value" id="failed">–</div></div>
+  </div>
+
+  <canvas id="chart"></canvas>
+
+  <script>
+    const REFRESH_MS = 10000;
+    const LIMIT = 300;
+    const fmt = (v) => (v == null ? "–" : `${Number(v).toFixed(1)} °C`);
+
+    const chart = new Chart(document.getElementById("chart"), {
+      type: "line",
+      data: { labels: [], datasets: [{ label: "Temperature (°C)", data: [], tension: 0.25, pointRadius: 0, borderWidth: 2 }] },
+      options: {
+        animation: false,
+        responsive: true,
+        interaction: { mode: "index", intersect: false },
+        scales: { x: { ticks: { maxTicksLimit: 8 } }, y: { title: { display: true, text: "°C" } } },
+      },
+    });
+
+    async function refresh() {
+      try {
+        const [readings, stats] = await Promise.all([
+          fetch(`/api/readings?limit=${LIMIT}`).then(r => r.json()),
+          fetch(`/api/stats`).then(r => r.json()),
+        ]);
+        chart.data.labels = readings.map(r => r.timestamp.slice(11, 19));
+        chart.data.datasets[0].data = readings.map(r => r.temperature);
+        chart.update();
+
+        const last = readings[readings.length - 1];
+        document.getElementById("current").textContent = last ? fmt(last.temperature) : "–";
+        document.getElementById("min").textContent = fmt(stats.min);
+        document.getElementById("max").textContent = fmt(stats.max);
+        document.getElementById("avg").textContent = fmt(stats.avg);
+        document.getElementById("count").textContent = stats.readings;
+        document.getElementById("failed").textContent = stats.failed_cycles;
+        document.getElementById("status").textContent =
+          `updated ${new Date().toLocaleTimeString()}` + (last ? ` · last reading ${last.timestamp}` : "");
+      } catch (err) {
+        document.getElementById("status").textContent = `error: ${err.message}`;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, REFRESH_MS);
+  </script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+Flask>=3.0,<4
+# Only needed on the Raspberry Pi itself; use --simulate elsewhere.
+Adafruit-DHT>=1.4; platform_machine in "armv6l armv7l aarch64"
